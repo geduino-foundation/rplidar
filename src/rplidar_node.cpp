@@ -51,9 +51,6 @@ using namespace rp::standalone::rplidar;
 // The pouinter to rplidar driver
 RPlidarDriver * rpLidarDriver = NULL;
 
-// The rp lidar device info pointer
-_rplidar_response_device_info_t * rpLidarDeviceInfoPtr = NULL;
-
 // The laser scan publisher pointer
 ros::Publisher * laserScanMessagePublisherPtr;
 
@@ -64,6 +61,12 @@ ros::Publisher * diagnosticsMessagePublisherPtr;
 std::string frameId;
 std::string serialPort;
 double diagnosticsFrequency;
+
+// Device info
+char modelChars[3];
+char firmwareVersionChars[4];
+char hardwareVersionChars[3];
+char serialNumberChars[32];
 
 void publishLaserScan(rplidar_response_measurement_node_t * nodes, 
                   size_t nodeCount, ros::Time scanStartTime,
@@ -144,37 +147,15 @@ void publishDiagnostics(uint8_t level, std::string message) {
 	diagnosticsMessage.status[0].name = "RPLidar";
 	diagnosticsMessage.status[0].message = message.c_str();
 	diagnosticsMessage.status[0].hardware_id = "rplidar";
-
-	if (rpLidarDeviceInfoPtr) {
-
-		// Get values as char array
-		char modelChars[1];
-		sprintf(modelChars, "%x", rpLidarDeviceInfoPtr->model);
-		char firmwareVersionChars[3];
-		sprintf(firmwareVersionChars, "%u.%u", (uint8_t) rpLidarDeviceInfoPtr->firmware_version >> 8, (uint8_t) rpLidarDeviceInfoPtr->firmware_version);
-		char hardwareVersionChars[1];
-		sprintf(hardwareVersionChars, "%x", rpLidarDeviceInfoPtr->hardware_version);
-		char serialNumberChars[32];
-		for (uint8_t index = 0; index < 16; index++) {
-			sprintf(&serialNumberChars[index * 2], "%x", rpLidarDeviceInfoPtr->serialnum[15 - index]);
-		}
-
-		diagnosticsMessage.status[0].values.resize(4);
-		diagnosticsMessage.status[0].values[0].key = "Model";
-		diagnosticsMessage.status[0].values[0].value = modelChars;
-		diagnosticsMessage.status[0].values[1].key = "Firmware version";
-		diagnosticsMessage.status[0].values[1].value = firmwareVersionChars;
-		diagnosticsMessage.status[0].values[2].key = "Hardware version";
-		diagnosticsMessage.status[0].values[2].value = hardwareVersionChars;
-		diagnosticsMessage.status[0].values[3].key = "Serial number";
-		diagnosticsMessage.status[0].values[3].value = serialNumberChars;
-
-	} else {
-
-		// No values
-		diagnosticsMessage.status[0].values.resize(0);
-
-	}
+    diagnosticsMessage.status[0].values.resize(4);
+    diagnosticsMessage.status[0].values[0].key = "Model";
+    diagnosticsMessage.status[0].values[0].value = modelChars;
+    diagnosticsMessage.status[0].values[1].key = "Firmware version";
+    diagnosticsMessage.status[0].values[1].value = firmwareVersionChars;
+    diagnosticsMessage.status[0].values[2].key = "Hardware version";
+    diagnosticsMessage.status[0].values[2].value = hardwareVersionChars;
+    diagnosticsMessage.status[0].values[3].key = "Serial number";
+    diagnosticsMessage.status[0].values[3].value = serialNumberChars;
 
 	// Publish diagnostics message
 	diagnosticsMessagePublisherPtr->publish(diagnosticsMessage);
@@ -373,13 +354,31 @@ int main(int argc, char * argv[]) {
 	// Get rp lidar device info
 	if (IS_OK(rpLidarDriver->getDeviceInfo(rpLidarDeviceInfo))) {
 
-		// Set pointer to rp lidar device info
-		rpLidarDeviceInfoPtr = & rpLidarDeviceInfo;
+        // Get values as char array
+        sprintf(modelChars, "%d", (int) rpLidarDeviceInfo.model);
+        sprintf(firmwareVersionChars, "%d.%02d", rpLidarDeviceInfo.firmware_version >> 8, rpLidarDeviceInfo.firmware_version & 0xFF);
+        sprintf(hardwareVersionChars, "%d", (int) rpLidarDeviceInfo.hardware_version);
+        for (uint8_t index = 0; index < 16; index++) {
+            sprintf(&serialNumberChars[index * 2], "%02X", rpLidarDeviceInfo.serialnum[index]);
+        }
+
+        // Log
+        ROS_INFO("model: %s", modelChars);
+        ROS_INFO("firmware version: %s", firmwareVersionChars);
+        ROS_INFO("hardware version: %s", hardwareVersionChars);
+        ROS_INFO("serial number: %s", serialNumberChars);
+
 
 	} else {
 
 		// Log
 		ROS_ERROR("cannot get rp lidar device info");
+
+        // Set all to N/A
+        sprintf(modelChars, "N/A");
+        sprintf(firmwareVersionChars, "N/A");
+        sprintf(hardwareVersionChars, "N/A");
+        sprintf(serialNumberChars, "N/A");
 
 	}
 
